@@ -35,6 +35,7 @@ class HawkesGen(object):
         we randomly sample mu, alpha, delta
         '''
         self.args = settings['args']
+        self.sum_for_time = settings['sum_for_time']
         numpy.random.seed(
             settings['seed_random']
         )
@@ -196,6 +197,73 @@ class HawkesGen(object):
         #
     #
     #
+    def sample_time_for_all_type(self):
+        # type_event is the type of event for which we want to sample the time
+        # it is k in our model formulation in paper
+        time_current = numpy.float32(0.0)
+        if len(self.one_seq) > 0:
+            time_current = self.one_seq[-1]['time_since_start']
+        #
+        self.compute_intensity_given_past(time_current)
+        intensity_hazard = numpy.sum(self.intensity)
+        #
+        u = 1.5
+        while u >= 1.0:
+            E = numpy.random.exponential(
+                scale=1.0, size=None
+            )
+            U = numpy.random.uniform(
+                low=0.0, high=1.0, size=None
+            )
+            time_current += E / intensity_hazard
+            self.compute_intensity_given_past(time_current)
+            u = U * intensity_hazard / numpy.sum(self.intensity)
+            # this snippet below is for adaptive thining
+            # it can speed things up
+            # by decreasing upper bound
+            # but it is toggled off when data is randomly generated at the beginning of this project
+            intensity_hazard = numpy.sum(self.intensity)
+        #
+        return time_current
+        #
+    #
+    #
+    def sample_one_event_sep(self):
+        time_of_happen = numpy.zeros(
+            (self.dim_process,), dtype=dtype
+        )
+        for type_event in range(self.dim_process):
+            # sample one event using "thinning algorithm"
+            time_of_happen[type_event] = numpy.copy(
+                self.sample_time_given_type(
+                    type_event
+                )
+            )
+        #
+        time_since_start_new = numpy.min(time_of_happen)
+        type_event_new = numpy.argmin(time_of_happen)
+        return time_since_start_new, type_event_new
+    #
+    #
+    def sample_one_event_tog(self):
+        time_since_start_new = self.sample_time_for_all_type()
+        self.compute_intensity_given_past(
+            time_since_start_new
+        )
+        prob = self.intensity / numpy.sum(self.intensity)
+        type_event_new = numpy.random.choice(
+            range(self.dim_process), p = prob
+        )
+        return time_since_start_new, numpy.int32(type_event_new)
+    #
+    #
+    def sample_one_event(self):
+        if self.sum_for_time:
+            return self.sample_one_event_tog()
+        else:
+            return self.sample_one_event_sep()
+    #
+    #
     def gen_one_seq(self, max_len):
         self.restart_sequence()
         #Liiniger (2009), p. 28, describes a "thinning algorithm":
@@ -211,19 +279,7 @@ class HawkesGen(object):
         )
         #
         for idx_event in range(max_len):
-            time_of_happen = numpy.zeros(
-                (self.dim_process,), dtype=dtype
-            )
-            for type_event in range(self.dim_process):
-                # sample one event using "thinning algorithm"
-                time_of_happen[type_event] = numpy.copy(
-                    self.sample_time_given_type(
-                        type_event
-                    )
-                )
-            #
-            time_since_start_new = numpy.min(time_of_happen)
-            type_event_new = numpy.argmin(time_of_happen)
+            time_since_start_new, type_event_new = self.sample_one_event()
             self.cnt_total_event += 1
             #
             # update sequence
@@ -325,6 +381,7 @@ class HawkesInhibGen(object):
         '''
         print "initializing ... "
         self.args = settings['args']
+        self.sum_for_time = settings['sum_for_time']
         numpy.random.seed(
             settings['seed_random']
         )
@@ -379,6 +436,11 @@ class HawkesInhibGen(object):
         print "done "
         #
         #
+    #
+    #
+    def set_args(self, dict_args):
+        self.args = dict_args
+    #
     #
     def soft_relu(self, x):
         return numpy.log(numpy.float32(1.0)+numpy.exp(x))
@@ -504,6 +566,74 @@ class HawkesInhibGen(object):
         return time_current
     #
     #
+    def sample_time_for_all_type(self):
+        # type_event is the type of event for which we want to sample the time
+        # it is the little k in our model formulation in paper
+        time_current = numpy.float32(0.0)
+        if len(self.one_seq) > 0:
+            time_current = self.one_seq[-1]['time_since_start']
+        #
+        #self.compute_intensity(time_current)
+        self.compute_intensity_upper_bound(time_current)
+        intensity_hazard = numpy.sum(self.intensity_ub)
+        #
+        u = 1.5
+        while u >= 1.0:
+            E = numpy.random.exponential(
+                scale=1.0, size=None
+            )
+            U = numpy.random.uniform(
+                low=0.0, high=1.0, size=None
+            )
+            time_current += ( E / intensity_hazard )
+            self.compute_intensity_given_past(time_current)
+            u = U * intensity_hazard / numpy.sum(self.intensity)
+            # for adaptive thinning,
+            # decrease the upper bound
+            # this is not used at the beginning of the project
+            # it is only used for sampling given pre-trained models
+            '''
+            self.compute_intensity_upper_bound(time_current)
+            intensity_hazard = numpy.sum(self.intensity_ub)
+            '''
+        return time_current
+    #
+    #
+    def sample_one_event_sep(self):
+        time_of_happen = numpy.zeros(
+            (self.dim_process,), dtype=dtype
+        )
+        for type_event in range(self.dim_process):
+            # sample one event using "thinning algorithm"
+            time_of_happen[type_event] = numpy.copy(
+                self.sample_time_given_type(
+                    type_event
+                )
+            )
+        #
+        time_since_start_new = numpy.min(time_of_happen)
+        type_event_new = numpy.argmin(time_of_happen)
+        return time_since_start_new, type_event_new
+    #
+    #
+    def sample_one_event_tog(self):
+        time_since_start_new = self.sample_time_for_all_type()
+        self.compute_intensity_given_past(
+            time_since_start_new
+        )
+        prob = self.intensity / numpy.sum(self.intensity)
+        type_event_new = numpy.random.choice(
+            range(self.dim_process), p = prob
+        )
+        return time_since_start_new, numpy.int32(type_event_new)
+    #
+    #
+    def sample_one_event(self):
+        if self.sum_for_time:
+            return self.sample_one_event_tog()
+        else:
+            return self.sample_one_event_sep()
+    #
     #
     def gen_one_seq(self, max_len):
         self.restart_sequence()
@@ -522,19 +652,7 @@ class HawkesInhibGen(object):
         )
         #
         for idx_event in range(max_len):
-            time_of_happen = numpy.zeros(
-                (self.dim_process,), dtype=dtype
-            )
-            for type_event in range(self.dim_process):
-                # sample one event using "thinning algorithm"
-                time_of_happen[type_event] = numpy.copy(
-                    self.sample_time_given_type(
-                        type_event
-                    )
-                )
-            #
-            time_since_start_new = numpy.min(time_of_happen)
-            type_event_new = numpy.argmin(time_of_happen)
+            time_since_start_new, type_event_new = self.sample_one_event()
             self.cnt_total_event += 1
             #
             # update sequence
@@ -629,6 +747,7 @@ class NeuralHawkesCTLSTM(object):
         #
         print "initializing generator ... "
         self.args = settings['args']
+        self.sum_for_time = settings['sum_for_time']
         self.dim_float = numpy.int32(32)
         if settings['path_pre_train'] == None:
             print "random parameters ... "
@@ -1040,6 +1159,89 @@ class NeuralHawkesCTLSTM(object):
         #
     #
     #
+    def sample_time_for_all_type(self):
+        # type_event is the type of event for which we want to sample the time
+        # it is the little k in our model formulation in paper
+        time_current = numpy.float32(0.0)
+        if len(self.one_seq) > 0:
+            time_current = self.one_seq[-1]['time_since_start']
+        #
+        #self.compute_intensity(time_current)
+        self.compute_intensity_upper_bound(time_current)
+        intensity_hazard = numpy.sum(self.intensity_ub)
+        #
+        u = 1.5
+        while u >= 1.0:
+            #print "type is : ", type_event
+            E = numpy.random.exponential(
+                scale=1.0, size=None
+            )
+            U = numpy.random.uniform(
+                low=0.0, high=1.0, size=None
+            )
+            #print "E U time_current : "
+            #print E, U, time_current
+            #print "intensity hazard is : "
+            #print intensity_hazard
+            time_current += (E / intensity_hazard)
+            self.compute_intensity_given_past(time_current)
+            u = U * intensity_hazard / numpy.sum(self.intensity)
+            #print "new time_current and u : "
+            #print time_current, u
+            #print "intensity and upper bound is : "
+            #print self.intensity
+            #print self.intensity_ub
+            # use adaptive thinning algorithm
+            # that is, decreasing the upper bound
+            # to make the sampling quicker
+            # use adaptive method by
+            # toggling on the following block
+            '''
+            self.compute_intensity_upper_bound(
+                time_current
+            )
+            intensity_hazard = numpy.sum(self.intensity_ub)
+            '''
+        return time_current
+        #
+    #
+    #
+    def sample_one_event_sep(self):
+        time_of_happen = numpy.zeros(
+            (self.dim_process,), dtype=dtype
+        )
+        for type_event in range(self.dim_process):
+            # sample one event using "thinning algorithm"
+            time_of_happen[type_event] = numpy.copy(
+                self.sample_time_given_type(
+                    type_event
+                )
+            )
+        #
+        time_since_start_new = numpy.min(time_of_happen)
+        type_event_new = numpy.argmin(time_of_happen)
+        return time_since_start_new, type_event_new
+    #
+    #
+    def sample_one_event_tog(self):
+        time_since_start_new = self.sample_time_for_all_type()
+        self.compute_intensity_given_past(
+            time_since_start_new
+        )
+        prob = self.intensity / numpy.sum(self.intensity)
+        type_event_new = numpy.random.choice(
+            range(self.dim_process), p = prob
+        )
+        return time_since_start_new, numpy.int32(type_event_new)
+    #
+    #
+    def sample_one_event(self):
+        if self.sum_for_time:
+            return self.sample_one_event_tog()
+        else:
+            return self.sample_one_event_sep()
+    #
+    #
     def gen_one_seq(self, max_len):
         self.restart_sequence()
         '''
@@ -1056,24 +1258,12 @@ class NeuralHawkesCTLSTM(object):
         )
         #
         for idx_event in range(max_len):
-            time_of_happen = numpy.zeros(
-                (self.dim_process,), dtype=dtype
-            )
             #
             # compute the hidden states
             # of the most recent event in sequence
             self.compute_hidden_states()
             #
-            for type_event in range(self.dim_process):
-                # sample one event using "thinning algorithm"
-                time_of_happen[type_event] = numpy.copy(
-                    self.sample_time_given_type(
-                        type_event
-                    )
-                )
-            #
-            time_since_start_new = numpy.min(time_of_happen)
-            type_event_new = numpy.argmin(time_of_happen)
+            time_since_start_new, type_event_new = self.sample_one_event()
             self.cnt_total_event += 1
             #
             # update sequence

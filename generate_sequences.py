@@ -46,6 +46,11 @@ def main():
         help='Do we set the params ? 0 -- False; 1 -- True'
     )
     parser.add_argument(
+        '-st', '--SumForTime',
+        default = 0, type = int, choices = [0, 1],
+        help='Do we use total intensity for time sampling? 0 -- False; 1 -- True'
+    )
+    parser.add_argument(
         '-fp', '--FilePretrain', required=False,
         help='File of pretrained model (e.g. ./tracks/track_PID=XX_TIME=YY/model.pkl)'
     )
@@ -93,6 +98,11 @@ def main():
     else:
         args.SetParams = True
     #
+    if args.SumForTime == 0:
+        args.SumForTime = False
+    else:
+        args.SumForTime = True
+    #
     id_process = os.getpid()
     time_current = datetime.datetime.now().isoformat()
     #
@@ -113,6 +123,7 @@ def main():
         #'dim_states': args.DimStates,
         'seed_random': args.Seed,
         'path_pre_train': args.FilePretrain,
+        'sum_for_time': args.SumForTime,
         'args': None
     }
     settings_gen_seqs = {
@@ -187,6 +198,7 @@ def main():
     print ("NumSeqs is : %s" % str(args.NumSeqs) )
     print ("MinLen is : %s" % str(args.MinLen) )
     print ("MaxLen is : %s" % str(args.MaxLen) )
+    print ("SumForTime is : %s" % str(args.SumForTime) )
     #
     #
     dict_args = {
@@ -203,7 +215,8 @@ def main():
         'FilePretrain': args.FilePretrain,
         'NumSeqs': args.NumSeqs,
         'MinLen': args.MinLen,
-        'MaxLen': args.MaxLen
+        'MaxLen': args.MaxLen,
+        'SumForTime': args.SumForTime
     }
     #
     gen_model.set_args(dict_args)
@@ -214,7 +227,10 @@ def main():
     print "The cut off for training, dev, test and test1 are : ", (cut_train, cut_dev, cut_test, args.NumSeqs)
     #
     #
+    time_0 = time.time()
     gen_model.gen_seqs(settings_gen_seqs)
+    time_1 = time.time()
+    dtime = time_1 - time_0
     gen_model.print_some()
     #
     gen_model.save_model(file_model)
@@ -235,7 +251,7 @@ def main():
     with open(file_save, 'wb') as f:
         pickle.dump(dict_data, f)
 
-    print "finished ! "
+    print "finished ! Took {} seconds !!!".format(str(round(dtime,2)))
     #
 
 if __name__ == "__main__": main()
