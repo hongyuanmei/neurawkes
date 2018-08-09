@@ -2,7 +2,6 @@
 # ignore these files
 #########
 
-*get_back_my_credit*
 data_candidates/*
 
 *.numbers
