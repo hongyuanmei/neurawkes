@@ -1,6 +1,8 @@
 # The Neural Hawkes Process
 Source code for [The Neural Hawkes Process (NIPS 2017)](https://arxiv.org/abs/1612.09328) runnable on GPU and CPU.
 
+Please check out [The Neural Hawkes Particle Smoothing](https://github.com/HMEIatJHU/neural-hawkes-particle-smoothing) for PyTorch Implementation (and more). 
+
 ## Reference
 If you use this code as part of any published research, please acknowledge the following paper (it encourages researchers who publish their code!):
 
